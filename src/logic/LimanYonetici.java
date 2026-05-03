@@ -3,222 +3,203 @@
  * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
  */
 package logic;
-import models.Arac;
-import models.Feribot;
-import org.w3c.dom.*;
-import javax.xml.parsers.*;
-import javax.xml.transform.*;
-import javax.xml.transform.dom.DOMSource;
-import javax.xml.transform.stream.StreamResult;
-import java.io.*;
+import datastructures.*;
+import models.*;
 import java.util.*;
 
-public class XmlManager {
-    private static final String DATA_DIR = "data/";
-    private static final String FERIBOT_FILE = DATA_DIR + "feribotlar.xml";
-    private static final String ARAC_FILE = DATA_DIR + "araclar.xml";
+/**
+ *
+ * @author idalozyurt
+ */
 
-    static {
-        new File(DATA_DIR).mkdirs();
+public class LimanYonetici {
+    private MyQueue<Arac> yuklemeYolu1;
+    private MyQueue<Arac> yuklemeYolu2;
+    private List<Feribot> feribotlar;
+    private List<Arac> tumAraclar;
+    private MyHashTable<String, Arac> hashTable;
+    private int yonlendirmeSayaci;
+    private int sonAracNo;
+
+    public LimanYonetici() {
+        this.yuklemeYolu1 = new MyQueue<>();
+        this.yuklemeYolu2 = new MyQueue<>();
+        this.feribotlar = new ArrayList<>();
+        this.tumAraclar = new ArrayList<>();
+        this.hashTable = new MyHashTable<>();
+        this.yonlendirmeSayaci = 0;
+        this.sonAracNo = 0;
     }
-
     
-    public static List<Feribot> feribotlariOku() {
-        List<Feribot> feribotlar = new ArrayList<>();
-        File file = new File(FERIBOT_FILE);
+    public void yukle() {
+        feribotlar = XmlManager.feribotlariOku();
+        tumAraclar = XmlManager.araclariOku();
         
-        if (!file.exists()) {
-            createDefaultFeribotXml();
+        
+        for (Arac arac : tumAraclar) {
+            hashTable.put(arac.getPlaka(), arac);
+            if (arac.getAracNo() > sonAracNo) {
+                sonAracNo = arac.getAracNo();
+            }
         }
         
-        try {
-            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-            DocumentBuilder builder = factory.newDocumentBuilder();
-            Document doc = builder.parse(file);
-            doc.getDocumentElement().normalize();
+        for (Arac arac : tumAraclar) {
+            if (arac.getAracNo() == 0) {
+                arac.setAracNo(++sonAracNo);
+            }
+        }
+        
+        
+        for (Arac arac : tumAraclar) {
+            yonlendirmeSayaci++;
+            if (yonlendirmeSayaci % 2 == 1) {
+                yuklemeYolu1.enqueue(arac);
+            } else {
+                yuklemeYolu2.enqueue(arac);
+            }
+        }
+    }
+    
+    public void simulasyonuBaslat() {
+        System.out.println("\n========== LİMAN SİMÜLASYONU BAŞLIYOR ==========\n");
+        
+        for (Feribot feribot : feribotlar) {
+            System.out.printf("\n>>> Feribot %d (Sefer: %s) rıhtıma yanaşıyor... (Giriş: %.2f)%n",
+                    feribot.getFeribotNo(), feribot.getSeferNo(), feribot.getRihtimGirisSaati());
             
-            NodeList nodeList = doc.getElementsByTagName("feribot");
-            for (int i = 0; i < nodeList.getLength(); i++) {
-                Node node = nodeList.item(i);
-                if (node.getNodeType() == Node.ELEMENT_NODE) {
-                    Element element = (Element) node;
-                    String seferNo = getTagValue("seferNo", element);
-                    int feribotNo = Integer.parseInt(getTagValue("feribotNo", element));
-                    double girisSaati = Double.parseDouble(getTagValue("rihtimGirisSaati", element));
-                    double kalkisSaati = Double.parseDouble(getTagValue("rihtimKalkisSaati", element));
-                    boolean hazirMi = Boolean.parseBoolean(getTagValue("kalkisaHazirMi", element));
-                    
-                    feribotlar.add(new Feribot(seferNo, feribotNo, girisSaati, kalkisSaati, hazirMi));
+            double simdikiZaman = feribot.getRihtimGirisSaati();
+            double sonYuklemeZamani = simdikiZaman;
+            boolean yuklemeDevam = true;
+            
+            while (yuklemeDevam && !feribot.isFull()) {
+                boolean yuklendi = false;
+                
+                
+                if (!yuklemeYolu1.isEmpty()) {
+                    Arac arac = yuklemeYolu1.dequeue();
+                    if (feribot.aracYukle(arac)) {
+                        System.out.printf("  ✓ 1. Yol'dan %s yüklendi (%.2f)%n", arac.getPlaka(), simdikiZaman);
+                        yuklendi = true;
+                        sonYuklemeZamani = arac.getGiseGirisSaati();
+                    } else {
+                       
+                        yuklemeYolu1.enqueue(arac);
+                    }
+                }
+                
+                if (!yuklemeYolu2.isEmpty()) {
+                    Arac arac = yuklemeYolu2.dequeue();
+                    if (feribot.aracYukle(arac)) {
+                        System.out.printf("  ✓ 2. Yol'dan %s yüklendi (%.2f)%n", arac.getPlaka(), simdikiZaman);
+                        yuklendi = true;
+                        sonYuklemeZamani = arac.getGiseGirisSaati();
+                    } else {
+                        yuklemeYolu2.enqueue(arac);
+                    }
+                }
+                
+                if (!yuklendi) {
+                    yuklemeDevam = false;
+                }
+                
+                simdikiZaman += 0.05;
+                if (feribot.kalkisSartlariSaglandiMi(simdikiZaman)) {
+                    break;
                 }
             }
-        } catch (Exception e) {
-            e.printStackTrace();
+            
+           
+            double kalkisSaati = feribot.getRihtimKalkisSaati();
+            if (sonYuklemeZamani > feribot.getRihtimGirisSaati() && feribot.kalkisSartlariSaglandiMi(sonYuklemeZamani)) {
+                kalkisSaati = sonYuklemeZamani;
+            }
+            
+            feribot.feribotBilgileriniYazdir();
+            System.out.printf(">>> Feribot %d KALKIŞ YAPIYOR! (Gerçek Kalkış: %.2f)%n%n",
+                    feribot.getFeribotNo(), kalkisSaati);
         }
+        
+        
+        System.out.println("\n========== YÜKLEME YOLLARINDA KALAN ARAÇLAR ==========");
+        System.out.print("1. Yol: ");
+        printKuyruk(yuklemeYolu1);
+        System.out.print("2. Yol: ");
+        printKuyruk(yuklemeYolu2);
+    }
+    
+    private void printKuyruk(MyQueue<Arac> kuyruk) {
+        MyQueue<Arac> temp = new MyQueue<>();
+        int count = 0;
+        while (!kuyruk.isEmpty()) {
+            Arac a = kuyruk.dequeue();
+            System.out.print(a.getPlaka() + " ");
+            temp.enqueue(a);
+            count++;
+        }
+        while (!temp.isEmpty()) {
+            kuyruk.enqueue(temp.dequeue());
+        }
+        System.out.println("(" + count + " araç)");
+    }
+    
+    public boolean aracEkle(String plaka, double girisSaati, int aracTipi) {
+     
+        if (hashTable.containsKey(plaka)) {
+            System.out.println("HATA: " + plaka + " plakalı araç ZATEN KAYITLI!");
+            return false;
+        }
+        
+       
+        int yeniAracNo = ++sonAracNo;
+        Arac yeniArac = new Arac("", yeniAracNo, plaka, girisSaati, aracTipi);
+        
+       
+        hashTable.put(plaka, yeniArac);
+        
+       
+        tumAraclar.add(yeniArac);
+        
+       
+        yonlendirmeSayaci++;
+        if (yonlendirmeSayaci % 2 == 1){
+            yuklemeYolu1.enqueue(yeniArac);
+        } else {
+            yuklemeYolu2.enqueue(yeniArac);
+        }
+        
+        XmlManager.aracEkle(yeniArac, tumAraclar);
+        
+        System.out.println("✓ Yeni araç eklendi: " + yeniArac);
+        return true;
+    }
+    
+    public void tumAraclariListele() {
+        System.out.println("\n========== TÜM ARAÇLAR (Araç No'ya Göre Sıralı) ==========");
+        List<Arac> sirali = new ArrayList<>(tumAraclar);
+        sirali.sort(Comparator.comparingInt(Arac::getAracNo));
+        for (Arac arac : sirali) {
+            System.out.println(arac);
+        }
+    }
+    
+   
+    public MyQueue<Arac> getYuklemeYolu1(){
+        return yuklemeYolu1;
+    }
+    public MyQueue<Arac> getYuklemeYolu2(){ 
+        return yuklemeYolu2;
+    }
+    public List<Feribot> getFeribotlar(){
         return feribotlar;
     }
-    
-    
-    public static List<Arac> araclariOku() {
-        List<Arac> araclar = new ArrayList<>();
-        File file = new File(ARAC_FILE);
-        
-        if (!file.exists()) {
-            createDefaultAracXml();
-        }
-        
-        try {
-            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-            DocumentBuilder builder = factory.newDocumentBuilder();
-            Document doc = builder.parse(file);
-            doc.getDocumentElement().normalize();
-            
-            NodeList nodeList = doc.getElementsByTagName("arac");
-            for (int i = 0; i < nodeList.getLength(); i++) {
-                Node node = nodeList.item(i);
-                if (node.getNodeType() == Node.ELEMENT_NODE) {
-                    Element element = (Element) node;
-                    String seferNo = getTagValue("seferNo", element);
-                    int aracNo = Integer.parseInt(getTagValue("aracNo", element));
-                    String plaka = getTagValue("plaka", element);
-                    double girisSaati = Double.parseDouble(getTagValue("giseGirisSaati", element));
-                    int aracTipi = Integer.parseInt(getTagValue("aracTipi", element));
-                    
-                    araclar.add(new Arac(seferNo, aracNo, plaka, girisSaati, aracTipi));
-                }
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        return araclar;
+    public List<Arac> getTumAraclar(){ 
+        return tumAraclar;
     }
-    
-    
-    public static void aracEkle(Arac yeniArac, List<Arac> mevcutAraclar) {
-        mevcutAraclar.add(yeniArac);
-        araclariYaz(mevcutAraclar);
+    public MyHashTable<String, Arac> getHashTable() {
+        return hashTable; 
     }
-    
-    
-    public static void araclariYaz(List<Arac> araclar) {
-        try {
-            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-            DocumentBuilder builder = factory.newDocumentBuilder();
-            Document doc = builder.newDocument();
-            
-            Element root = doc.createElement("araclar");
-            doc.appendChild(root);
-            
-            for (Arac arac : araclar) {
-                Element aracElem = doc.createElement("arac");
-                root.appendChild(aracElem);
-                
-                addElement(doc, aracElem, "seferNo", arac.getSeferNo());
-                addElement(doc, aracElem, "aracNo", String.valueOf(arac.getAracNo()));
-                addElement(doc, aracElem, "plaka", arac.getPlaka());
-                addElement(doc, aracElem, "giseGirisSaati", String.valueOf(arac.getGiseGirisSaati()));
-                addElement(doc, aracElem, "aracTipi", String.valueOf(arac.getAracTipi()));
-            }
-            
-            saveDocument(doc, ARAC_FILE);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-    
-    
-    private static void createDefaultFeribotXml() {
-        try {
-            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-            DocumentBuilder builder = factory.newDocumentBuilder();
-            Document doc = builder.newDocument();
-            
-            Element root = doc.createElement("feribotlar");
-            doc.appendChild(root);
-            
-            String[][] feribotData = {
-                {"S101", "1", "9.00", "10.00", "false"},
-                {"S102", "2", "11.00", "12.00", "false"},
-                {"S103", "3", "13.00", "14.00", "false"},
-                {"S104", "4", "15.00", "16.00", "false"}
-            };
-            
-            for (String[] data : feribotData) {
-                Element feribotElem = doc.createElement("feribot");
-                root.appendChild(feribotElem);
-                addElement(doc, feribotElem, "seferNo", data[0]);
-                addElement(doc, feribotElem, "feribotNo", data[1]);
-                addElement(doc, feribotElem, "rihtimGirisSaati", data[2]);
-                addElement(doc, feribotElem, "rihtimKalkisSaati", data[3]);
-                addElement(doc, feribotElem, "kalkisaHazirMi", data[4]);
-            }
-            
-            saveDocument(doc, FERIBOT_FILE);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-    
-    
-    private static void createDefaultAracXml() {
-        try {
-            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-            DocumentBuilder builder = factory.newDocumentBuilder();
-            Document doc = builder.newDocument();
-            
-            Element root = doc.createElement("araclar");
-            doc.appendChild(root);
-            
-            String[][] aracData = {
-                {"", "1", "34ABC01", "9.30", "1"},
-                {"", "2", "34ABC02", "9.35", "2"},
-                {"", "3", "34ABC03", "9.40", "2"},
-                {"", "4", "34ABC04", "9.45", "1"},
-                {"", "5", "34ABC05", "10.00", "2"},
-                {"", "6", "34ABC06", "10.05", "2"},
-                {"", "7", "34ABC07", "10.10", "1"},
-                {"", "8", "34ABC08", "10.15", "2"}
-            };
-            
-            for (String[] data : aracData) {
-                Element aracElem = doc.createElement("arac");
-                root.appendChild(aracElem);
-                addElement(doc, aracElem, "seferNo", data[0]);
-                addElement(doc, aracElem, "aracNo", data[1]);
-                addElement(doc, aracElem, "plaka", data[2]);
-                addElement(doc, aracElem, "giseGirisSaati", data[3]);
-                addElement(doc, aracElem, "aracTipi", data[4]);
-            }
-            
-            saveDocument(doc, ARAC_FILE);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-    
-    private static String getTagValue(String tag, Element element) {
-        NodeList nodeList = element.getElementsByTagName(tag);
-        if (nodeList.getLength() > 0) {
-            Node node = nodeList.item(0);
-            if (node.getFirstChild() != null) {
-                return node.getFirstChild().getNodeValue();
-            }
-        }
-        return "";
-    }
-    
-    private static void addElement(Document doc, Element parent, String tag, String value) {
-        Element elem = doc.createElement(tag);
-        elem.appendChild(doc.createTextNode(value));
-        parent.appendChild(elem);
-    }
-    
-    private static void saveDocument(Document doc, String filePath) throws TransformerException {
-        TransformerFactory transformerFactory = TransformerFactory.newInstance();
-        Transformer transformer = transformerFactory.newTransformer();
-        transformer.setOutputProperty(OutputKeys.INDENT, "yes");
-        transformer.setOutputProperty("{http://xml.apache.org/xslt}indent-amount", "2");
-        DOMSource source = new DOMSource(doc);
-        StreamResult result = new StreamResult(new File(filePath));
-        transformer.transform(source, result);
+    public int getSonAracNo(){
+        return sonAracNo; 
     }
 }
+
