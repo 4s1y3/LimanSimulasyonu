@@ -1,77 +1,100 @@
 
 package dataStructures;
 
-import models.Arac;
-public class MyHashTable {
-    private Arac[] table;
+
+public class MyHashTable<K, V> {
+    private static class HashNode<K, V> {
+        K key;
+        V value;
+        HashNode<K, V> next;
+
+        HashNode(K key, V value) {
+            this.key = key;
+            this.value = value;
+            this.next = null;
+        }
+    }
+
+    private HashNode<K, V>[] buckets;
     private int capacity;
     private int size;
 
-    public HashTable(int capacity) {
-
+    public MyHashTable(int capacity) {
         this.capacity = capacity;
-        this.table = new Arac[capacity];
         this.size = 0;
+        this.buckets = new HashNode[capacity];
     }
 
-    private int hash(String plaka) {
-
-        int sum = 0;
-
-        for (int i = 0; i < plaka.length(); i++) {
-            sum += plaka.charAt(i);
-        }
-
-        return sum % capacity;
+    public MyHashTable() {
+        this(16);
     }
 
-  
-    public boolean exists(String plaka) {
+    private int getBucketIndex(K key) {
+        return Math.abs(key.hashCode()) % capacity;
+    }
 
-        int index = hash(plaka);
-        int startIndex = index;
+    public void put(K key, V value) {
+        int index = getBucketIndex(key);
+        HashNode<K, V> head = buckets[index];
 
-        while (table[index] != null) {
-
-            if (table[index].getPlaka().equals(plaka)) {
-                return true;
+        HashNode<K, V> current = head;
+        while (current != null) {
+            if (current.key.equals(key)) {
+                current.value = value;
+                return;
             }
-
-            
-            index = (index + 1) % capacity;
-
-            
-            if (index == startIndex) {
-                break;
-            }
+            current = current.next;
         }
 
-        return false;
-    }
-
- 
-    public boolean insert(Arac arac) {
-
-       
-        if (exists(arac.getPlaka())) {
-            return false;
-        }
-
-        int index = hash(arac.getPlaka());
-
-       
-        while (table[index] != null) {
-            index = (index + 1) % capacity;
-        }
-
-        table[index] = arac;
+        HashNode<K, V> newNode = new HashNode<>(key, value);
+        newNode.next = head;
+        buckets[index] = newNode;
         size++;
+    }
 
-        return true;
+    public V get(K key) {
+        int index = getBucketIndex(key);
+        HashNode<K, V> current = buckets[index];
+        while (current != null) {
+            if (current.key.equals(key)) {
+                return current.value;
+            }
+            current = current.next;
+        }
+        return null;
+    }
+
+    public boolean containsKey(K key) {
+        return get(key) != null;
+    }
+
+    public V remove(K key) {
+        int index = getBucketIndex(key);
+        HashNode<K, V> current = buckets[index];
+        HashNode<K, V> prev = null;
+
+        while (current != null) {
+            if (current.key.equals(key)) {
+                if (prev == null) {
+                    buckets[index] = current.next;
+                } else {
+                    prev.next = current.next;
+                }
+                size--;
+                return current.value;
+            }
+            prev = current;
+            current = current.next;
+        }
+        return null;
     }
 
     public int size() {
         return size;
     }
+
+    public boolean isEmpty() {
+        return size == 0;
+    }
 }
-}
+
