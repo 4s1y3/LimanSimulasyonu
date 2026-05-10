@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<feribotlar>
+  <feribot>
+    <seferNo>S101</seferNo>
+    <feribotNo>1</feribotNo>
+    <rihtimGirisSaati>9.00</rihtimGirisSaati>
+    <rihtimKalkisSaati>10.00</rihtimKalkisSaati>
+    <kalkisaHazirMi>false</kalkisaHazirMi>
+  </feribot>
+  <feribot>
+    <seferNo>S102</seferNo>
+    <feribotNo>2</feribotNo>
+    <rihtimGirisSaati>11.00</rihtimGirisSaati>
+    <rihtimKalkisSaati>12.00</rihtimKalkisSaati>
+    <kalkisaHazirMi>false</kalkisaHazirMi>
+  </feribot>
+  <feribot>
+    <seferNo>S103</seferNo>
+    <feribotNo>3</feribotNo>
+    <rihtimGirisSaati>13.00</rihtimGirisSaati>
+    <rihtimKalkisSaati>14.00</rihtimKalkisSaati>
+    <kalkisaHazirMi>false</kalkisaHazirMi>
+  </feribot>
+  <feribot>
+    <seferNo>S104</seferNo>
+    <feribotNo>4</feribotNo>
+    <rihtimGirisSaati>15.00</rihtimGirisSaati>
+    <rihtimKalkisSaati>16.00</rihtimKalkisSaati>
+    <kalkisaHazirMi>false</kalkisaHazirMi>
+  </feribot>
+</feribotlar>
