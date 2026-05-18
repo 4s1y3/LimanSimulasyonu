@@ -1,112 +1,142 @@
 package gui;
 
-import javafx.scene.control.Button;
+import javafx.animation.KeyFrame;
+import javafx.animation.Timeline;
+import javafx.util.Duration;
 import logic.LimanYonetici;
 import models.Arac;
 import models.Feribot;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Adım adım simülasyon motoru.
- * LimanYonetici'nin mevcut metodlarını kullanır,
- * veri yapısı koduna dokunmaz.
+ * Adım adım + otomatik simülasyon motoru.
+ * Yalnızca LimanYonetici'nin public API'sini kullanır.
  */
 public class SimulasyonMotoru {
 
     private final MainFrame frame;
     private LimanYonetici yonetici;
 
-    private int aktifFeribotIdx = 0;
-    private int yuklenenAracSayisi = 0;
-    private boolean durduruldu = false;
-    private int yol1Sayac = 0, yol2Sayac = 0;
+    private int     aktifIdx        = 0;
+    private int     yuklenenSayi    = 0;
+    private boolean calisiyor       = false;
+    private double  hizCarpan       = 1.0;
+    private Timeline autoTimeline;
+
+    // Araçlar yol1 ve yol2'den sırayla alınır
+    private boolean siradakiYol1 = true;
 
     public SimulasyonMotoru(MainFrame frame, LimanYonetici yonetici) {
         this.frame    = frame;
         this.yonetici = yonetici;
     }
 
-    public void reset() {
-        aktifFeribotIdx    = 0;
-        yuklenenAracSayisi = 0;
-        durduruldu         = false;
-        yol1Sayac          = 0;
-        yol2Sayac          = 0;
+    public void reset(LimanYonetici yeni) {
+        durdur();
+        this.yonetici  = yeni;
+        aktifIdx       = 0;
+        yuklenenSayi   = 0;
+        calisiyor      = false;
+        siradakiYol1   = true;
     }
 
-    /** Bir adım ilerlet: bir araç yükle ya da ferbot değiştir. */
+    // ── Otomatik oynatma ─────────────────────────────
+    public void oynat() {
+        if (calisiyor) return;
+        calisiyor = true;
+        autoTimeline = new Timeline(new KeyFrame(
+                Duration.millis(1800 / hizCarpan), e -> adimAt()
+        ));
+        autoTimeline.setCycleCount(Timeline.INDEFINITE);
+        autoTimeline.play();
+    }
+
+    public void durdur() {
+        calisiyor = false;
+        if (autoTimeline != null) autoTimeline.stop();
+    }
+
+    public boolean isCalisiyor() { return calisiyor; }
+
+    public void setHiz(double carpan) {
+        this.hizCarpan = carpan;
+        if (calisiyor) { durdur(); oynat(); }
+    }
+
+    // ── Tek adım ─────────────────────────────────────
     public void adimAt() {
         List<Feribot> feribotlar = yonetici.getFeribotlar();
-        if (feribotlar.isEmpty()) {
-            frame.olay("--", "Önce veri yükleyin", MainFrame.RED);
-            return;
+        if (feribotlar == null || feribotlar.isEmpty()) {
+            frame.olay("--:--", "Önce veri yükleyin", MainFrame.RED);
+            durdur(); return;
         }
-        if (aktifFeribotIdx >= feribotlar.size()) {
-            frame.olay(frame.simSaatStr(), "✅ Tüm seferler tamamlandı", MainFrame.GREEN);
+        if (aktifIdx >= feribotlar.size()) {
+            frame.olay("--:--", "✅ Tüm seferler tamamlandı", MainFrame.EMERALD);
+            durdur(); return;
+        }
+
+        Feribot aktif = feribotlar.get(aktifIdx);
+
+        // Kalkış şartları sağlandıysa kalkış yap
+        if (aktif.kalkisSartlariSaglandiMi(aktif.getRihtimGirisSaati())) {
+            frame.olay(frame.saatStr(),
+                    "⚓ Feribot " + aktif.getFeribotNo() + " (" + aktif.getSeferNo() + ") kalkış yaptı",
+                    MainFrame.GOLD);
+            aktifIdx++;
+            siradakiYol1 = true;
             frame.yenile();
             return;
         }
 
-        Feribot aktif = feribotlar.get(aktifFeribotIdx);
-
-        // Kalkış koşulu sağlandıysa sonraki feribota geç
-        if (aktif.isFull() || aktif.kalkisSartlariSaglandiMi(9.0 + aktifFeribotIdx)) {
-            frame.olay(frame.simSaatStr(),
-                    "⚓ Feribot " + aktif.getFeribotNo() + " kalkış yaptı", MainFrame.GOLD);
-            aktifFeribotIdx++;
-            frame.yenile();
-            return;
-        }
-
-        // Sırayla Yol1 ve Yol2'den araç yükle
+        // Araç yükle — önce belirlenen yoldan, sonra diğerinden
         boolean yuklendi = false;
-        if (!yonetici.getYuklemeYolu1().isEmpty()) {
-            Arac a = yonetici.getYuklemeYolu1().dequeue();
-            if (aktif.aracYukle(a)) {
-                yuklenenAracSayisi++;
-                yol1Sayac++;
-                frame.olay(frame.simSaatStr(),
-                        a.getPlaka() + " → Feribot " + aktif.getFeribotNo() +
-                                (a.getAracTipi()==1 ? " alt kat" : " üst kat"), MainFrame.TEAL);
-                yuklendi = true;
+        for (int deneme = 0; deneme < 2 && !yuklendi; deneme++) {
+            var kuyruk = siradakiYol1
+                    ? yonetici.getYuklemeYolu1()
+                    : yonetici.getYuklemeYolu2();
+            int yolNo = siradakiYol1 ? 1 : 2;
+
+            if (!kuyruk.isEmpty()) {
+                Arac a = kuyruk.dequeue();
+                if (aktif.aracYukle(a)) {
+                    yuklenenSayi++;
+                    boolean agir = a.getAracTipi() == 1;
+                    frame.olay(frame.saatStr(),
+                            a.getPlaka() + " → Feribot " + aktif.getFeribotNo()
+                                    + " · " + (agir ? "Alt Kat" : "Üst Kat")
+                                    + "  [Yol " + yolNo + "]",
+                            agir ? MainFrame.TRK_C : MainFrame.SKY);
+                    yuklendi = true;
+                    siradakiYol1 = !siradakiYol1; // sıradaki yolu değiştir
+                } else {
+                    kuyruk.enqueue(a); // sığmadı, geri koy
+                    siradakiYol1 = !siradakiYol1;
+                }
             } else {
-                yonetici.getYuklemeYolu1().enqueue(a);
+                siradakiYol1 = !siradakiYol1;
             }
         }
-        if (!yuklendi && !yonetici.getYuklemeYolu2().isEmpty()) {
-            Arac a = yonetici.getYuklemeYolu2().dequeue();
-            if (aktif.aracYukle(a)) {
-                yuklenenAracSayisi++;
-                yol2Sayac++;
-                frame.olay(frame.simSaatStr(),
-                        a.getPlaka() + " → Feribot " + aktif.getFeribotNo() +
-                                (a.getAracTipi()==1 ? " alt kat" : " üst kat"), MainFrame.BLUE_ACC);
-                yuklendi = true;
-            } else {
-                yonetici.getYuklemeYolu2().enqueue(a);
-            }
-        }
+
         if (!yuklendi) {
-            frame.olay(frame.simSaatStr(), "Kuyruk boş, feribot kalkıyor", MainFrame.ORANGE);
-            aktifFeribotIdx++;
+            // Her iki kuyruk da boşsa veya araç sığmıyorsa kalkış yap
+            frame.olay(frame.saatStr(),
+                    "⚓ Feribot " + aktif.getFeribotNo() + " kalkış yaptı (kuyruk boş)",
+                    MainFrame.GOLD);
+            aktifIdx++;
+            siradakiYol1 = true;
         }
 
         frame.yenile();
     }
 
-    public void togglePause(Button btn) {
-        durduruldu = !durduruldu;
-        btn.setText(durduruldu ? "▶  Devam" : "⏸  Duraklat");
-    }
-
-    public int getAktifIdx()            { return aktifFeribotIdx; }
-    public int getYuklenenAracSayisi()  { return yuklenenAracSayisi; }
+    // ── Getters ───────────────────────────────────────
+    public int     getAktifIdx()         { return aktifIdx; }
+    public int     getYuklenenSayi()     { return yuklenenSayi; }
 
     public Feribot getAktifFeribot() {
-        List<Feribot> list = yonetici.getFeribotlar();
-        if (list.isEmpty() || aktifFeribotIdx >= list.size()) return null;
-        return list.get(aktifFeribotIdx);
+        List<Feribot> f = yonetici.getFeribotlar();
+        if (f == null || f.isEmpty() || aktifIdx >= f.size()) return null;
+        return f.get(aktifIdx);
     }
 }
